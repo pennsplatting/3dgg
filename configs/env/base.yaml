@@ -12,6 +12,6 @@ symlinks_to_create:
   - ${env.project_path}/data
   - ${env.project_path}/embeddings
 tmp_dir: "/tmp"
-datasets_dir: ~
+datasets_dir: "/home/zuoxy/cg/3dgp/data"
 embeddings_root_dir: embeddings
 slurm_constraint: v100

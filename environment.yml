@@ -41,4 +41,8 @@ dependencies:
     - protobuf==3.20 # Otherwise we get "TypeError: Descriptors cannot not be created directly." when loading TensorBoard
     - pymcubes==0.1.4
     - trimesh==3.20.1
+    - hydra-core
+    - gitpython
+    - psutil
+    - torchvision
 

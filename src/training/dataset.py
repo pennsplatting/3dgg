@@ -18,11 +18,15 @@ import torch
 import numpy as np
 from src import dnnlib
 from src.training.rendering_utils import get_mean_sampling_value, get_mean_angles_values
-
-try:
-    import pyspng
-except ImportError:
-    pyspng = None
+import sys
+sys.path.append("/home/zuoxy/anaconda3/envs/3dgp/lib/python3.9/site-packages")
+# print(sys.path)
+import pyspng
+# try:
+#     import pyspng
+# except ImportError:
+#     print("pyspng not found")
+#     pyspng = None
 
 #----------------------------------------------------------------------------
 
@@ -310,6 +314,11 @@ class ImageFolderDataset(Dataset):
     def _load_raw_depth(self, raw_idx) -> np.ndarray:
         image_base_name = self._image_fnames[raw_idx][:-len(self._file_ext(self._image_fnames[raw_idx]))]
         depth_fname = f'{image_base_name}_depth.png'
+        # print(image_base_name, depth_fname)
+        # if os.path.exists(f'{image_base_name}.png'): print("raw image found")
+        # else: print("raw not found")
+        # if os.path.exists(depth_fname): print("depth image found")
+        # else: print("depth not found ")
         with self._open_file(depth_fname) as f:
             depth = pyspng.load(f.read()) # [h, w, num_depth_channels]
             # LeReS produces [h, w, 2], while ZoeDepth produces [h, w]

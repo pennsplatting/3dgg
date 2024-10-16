@@ -345,3 +345,28 @@ def compute_viewing_frustum_sizes(ray_start: float, ray_end: float, fov: float) 
 
 #----------------------------------------------------------------------------
 
+def compute_camera_intrinsics(camera_params: TensorGroup, image_width, image_height) -> torch.Tensor:
+    # Assume the fov is given in degrees in the camera params
+    fov = camera_params['fov']  # Field of view in degrees [batch_size]
+    
+    # Convert FOV to radians using PyTorch tensor operations
+    fov_rad = torch.deg2rad(fov)  # Convert FOV to radians [batch_size]
+
+    # Compute focal lengths (assuming symmetric camera)
+    f_x = (image_width / 2.0) / torch.tan(fov_rad / 2.0)  # [batch_size]
+    f_y = (image_height / 2.0) / torch.tan(fov_rad / 2.0)  # [batch_size]
+
+    # Principal point (center of the image)
+    c_x = torch.tensor(image_width / 2.0, dtype=torch.float32)
+    c_y = torch.tensor(image_height / 2.0, dtype=torch.float32)
+
+    # Construct the intrinsic matrix for each camera in the batch
+    K = torch.zeros((f_x.shape[0], 3, 3), dtype=torch.float32)
+
+    K[:, 0, 0] = f_x  # f_x goes into (0, 0)
+    K[:, 1, 1] = f_y  # f_y goes into (1, 1)
+    K[:, 0, 2] = c_x  # c_x goes into (0, 2)
+    K[:, 1, 2] = c_y  # c_y goes into (1, 2)
+    K[:, 2, 2] = 1.0  # The (2, 2) element is always 1
+
+    return K

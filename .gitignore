@@ -1,0 +1,8 @@
+experiments/
+embeddings/
+data/
+*.bash 
+models/
+.hydra/
+debug/
+env/

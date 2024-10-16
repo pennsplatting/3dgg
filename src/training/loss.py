@@ -86,7 +86,6 @@ class StyleGAN2Loss(Loss):
         img = maybe_blur(img, blur_sigma) # [batch_size, c, h, w]
 
         assert img.shape[1] == 4 or not self.cfg.training.use_depth, f"Wrong shape: {img.shape}"
-
         if self.cfg.training.use_depth:
             with torch.autograd.profiler.record_function('depth_blur'):
                 blur_size = np.floor(blur_sigma * 3)
@@ -123,7 +122,6 @@ class StyleGAN2Loss(Loss):
 
         if self.cfg.training.use_depth:
             real_data.img = torch.cat([real_data.img, real_data.depth], dim=1) # [batch_size, c + 1, h, w]
-
         # Gmain: Maximize logits for generated images.
         if phase in ['Gmain', 'Gall']:
             with torch.autograd.profiler.record_function('Gmain_forward'):
@@ -192,9 +190,9 @@ class StyleGAN2Loss(Loss):
                     # Sampling posterior
                     camera_params_posterior = self.G.synthesis.camera_adaptor(camera_params_prior, z, c) # [num_samples, ...]
                     camera_params_posterior_raw = self.G.synthesis.camera_adaptor.unroll_camera_params(camera_params_posterior) # [num_samples, 8]
-                    distance_matrices = torch.stack([ot.dist(camera_params_posterior_raw[:, [i]], camera_params_prior_raw[:, [i]]) for i in range(camera_params_posterior_raw.shape[1])]) # [8, num_samples, num_samples]
+                    distance_matrices = torch.stack([torch.Tensor(ot.dist(camera_params_posterior_raw[:, [i]].detach().cpu().numpy(), camera_params_prior_raw[:, [i]].detach().cpu().numpy())) for i in range(camera_params_posterior_raw.shape[1])]) # [8, num_samples, num_samples]
                     sample_weights = torch.ones(len(camera_params_posterior_raw), device=self.device) / len(camera_params_posterior_raw) # [num_samples]
-                    emd_regs = torch.stack([ot.emd2(sample_weights, sample_weights, M) for M in distance_matrices]) # [8]
+                    emd_regs = torch.stack([torch.tensor(ot.emd2(sample_weights.detach().cpu(), sample_weights.detach().cpu(), M.detach().cpu())) for M in distance_matrices]) # [8]
                     emd_regs = self.G.synthesis.camera_adaptor.roll_camera_params(emd_regs.unsqueeze(0)) # [1, ...]
 
                     training_stats.report('Dist_emd_reg/yaw', emd_regs.angles[:, 0])

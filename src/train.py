@@ -28,6 +28,8 @@ from src.torch_utils import custom_ops
 from src.training.rendering_utils import get_max_sampling_value, validate_frustum, get_mean_sampling_value, compute_viewing_frustum_sizes
 from src.training.tri_plane_renderer import validate_image_plane
 
+import sys
+sys.path.append("/home/zuoxy/anaconda3/envs/3dgp/lib/python3.9/site-packages")
 #----------------------------------------------------------------------------
 
 def subprocess_fn(rank, c, temp_dir):

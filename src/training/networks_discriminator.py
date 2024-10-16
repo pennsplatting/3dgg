@@ -155,6 +155,7 @@ class DiscriminatorEpilogue(torch.nn.Module):
             self.feat_out = None
 
     def forward(self, x, cmap, force_fp32=False, predict_feat: bool=False):
+
         misc.assert_shape(x, [None, self.in_channels, self.resolution, self.resolution]) # [NCHW]
         _ = force_fp32 # unused
         dtype = torch.float32
@@ -281,7 +282,7 @@ class Discriminator(torch.nn.Module):
             cmap = self.head_mapping(z=None, c=c, camera_angles=camera_angles) # [TODO]
         else:
             cmap = None
-
+            
         x, f = self.b4(x, cmap, predict_feat=predict_feat)
         x = x.squeeze(1) # [batch_size]
         misc.assert_shape(x, [batch_size])

@@ -1,0 +1,11 @@
+#training horses
+python3 src/infra/launch.py hydra.run.dir=. desc=1010 dataset=lsun_horses dataset.resolution=256 model.loss_kwargs.gamma=0.05 training.resume=null num_gpus=1 
+
+#resume training horses
+python src/infra/launch.py hydra.run.dir=. experiment_dir=<PATH_TO_EXPERIMENT> training.resume=latest num_gpus=2
+
+#training imagenet
+python3 src/infra/launch.py hydra.run.dir=. desc=0912 dataset=imagenet dataset.resolution=256 model.loss_kwargs.gamma=0.05 training.resume=null num_gpus=2 model.generator.cmax=1024 model.discriminator.cmax=1024 model.generator.cbase=65536 model.discriminator.cbase=65536
+
+#resume training imagenet 
+python src/infra/launch.py hydra.run.dir=. experiment_dir=/home/zuoxy/cg/3dgp/experiments/imagenet_256_with_depth_3dgp_patch_beta_p64_mins0.25_cam-uniform_gamma0.05_0903-6712dde-dirty training.resume=latest num_gpus=2

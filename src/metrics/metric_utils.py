@@ -152,7 +152,7 @@ class FeatureStats:
                 torch.distributed.broadcast(y, src=src)
                 ys.append(y)
             x = torch.stack(ys, dim=1).flatten(0, 1) # interleave samples
-        self.append(x.cpu().numpy())
+        self.append(x.detach().cpu().numpy())
 
     def get_all(self):
         assert self.capture_all
