@@ -1,5 +1,5 @@
 #training horses
-python3 src/infra/launch.py hydra.run.dir=. desc=1010 dataset=lsun_horses dataset.resolution=256 model.loss_kwargs.gamma=0.05 training.resume=null num_gpus=1 
+python3 src/infra/launch.py hydra.run.dir=. desc=1016 dataset=lsun_horses dataset.resolution=256 model.loss_kwargs.gamma=0.05 training.resume=null num_gpus=1 
 
 #resume training horses
 python src/infra/launch.py hydra.run.dir=. experiment_dir=<PATH_TO_EXPERIMENT> training.resume=latest num_gpus=2

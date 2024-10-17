@@ -131,17 +131,16 @@ class SynthesisNetwork(torch.nn.Module):
             **synthesis_seq_kwargs,
         )
 
-        self.options = EasyDict({'gen_xyz': True, 'gen_rgb': True, 'gen_sh': False, 'gen_opacity': True, 'gen_scaling': True, 'gen_rotation': True, 'gen_xyz_offset': False, 
+        self.options = EasyDict({'gen_xyz': True, 'gen_rgb': False, 'gen_sh': True, 'gen_opacity': True, 'gen_scaling': True, 'gen_rotation': True, 'gen_xyz_offset': False, 
         'xyz_offset_scale': 0.1, 'depth_bias': 2, 'depth_factor': 0.5, 
         'scale_bias': -2, 'scale_factor': 1, 'max_scaling': -1, 'min_scaling': -15})
         options = self.options
         self.feat_dim = 1 * options['gen_xyz'] + 3 * options['gen_rgb'] + 3 * options['gen_sh'] + 1 * options['gen_opacity'] + 3 * options['gen_scaling'] + 4 * options['gen_rotation'] + 3 * options['gen_xyz_offset']
 
         self.text_decoder = TextureDecoder(n_features=14, options=self.options)
-        self.rgbd_head = nn.Conv2d(decoder_out_channels, img_channels + 1, kernel_size=3, stride=1, padding=0)
+        # self.rgbd_head = nn.Conv2d(decoder_out_channels, img_channels + 1, kernel_size=3, stride=1, padding=0)
         # self.depth_head = nn.Conv2d(decoder_out_channels, depth_channels, kernel_size=3, stride=1, padding=0)
 
-        # self.tri_plane_mlp = TriPlaneMLP(self.cfg, out_dim=self.img_channels)
         self.num_ws = self.tri_plane_decoder.num_ws
         # self.nerf_noise_std = 0.0
         self.train_resolution = self.cfg.patch.resolution if self.cfg.patch.enabled else self.img_resolution # TODO: enable patch resolution
@@ -149,7 +148,8 @@ class SynthesisNetwork(torch.nn.Module):
         self.test_resolution = self.img_resolution
         self.z_near = 0.5
         self.z_far = 10 #TODO: fimd suitable value for this 
-        self.h = self.w = (self.train_resolution if self.training else self.test_resolution)
+        # self.h = self.w = (self.train_resolution if self.training else self.test_resolution)
+        self.h = self.w = 256
         self.sh_degree = 0 #TODO: find suitable value for this
         self.viewpoint_camera = MiniCam(self.h, self.w, self.z_near, self.z_far) #TODO: resolution check 
         self.gaussian = GaussianModel(self.sh_degree)
@@ -193,19 +193,6 @@ class SynthesisNetwork(torch.nn.Module):
         self.nerf_noise_std = linear_schedule(cur_kimg, self.cfg.nerf_noise_std_init, 0.0, self.cfg.nerf_noise_kimg_growth)
         if not self.depth_adaptor is None:
             self.depth_adaptor.progressive_update(cur_kimg)
-
-    # @torch.no_grad()
-    # def compute_densities(self, ws: torch.Tensor, coords: torch.Tensor, max_batch_res: int=32, **block_kwargs) -> torch.Tensor:
-    #     plane_feats = self.tri_plane_decoder(ws[:, :self.tri_plane_decoder.num_ws], **block_kwargs) # [batch_size, 3 * feat_dim, tp_h, tp_w]
-    #     ray_d_world = torch.zeros_like(coords) # [batch_size, num_points, 3]
-    #     rgb_sigma = run_batchwise(
-    #         fn=simple_tri_plane_renderer,
-    #         data=dict(coords=coords),
-    #         batch_size=max_batch_res ** 3,
-    #         dim=1,
-    #         mlp=self.tri_plane_mlp, x=plane_feats, scale=self.cfg.camera.cube_scale,p0) # [batch_size, num_coords, num_feats]
-
-    #     return rgb_sigma['sigma'] # [batch_size, num_coords, 1]
         
     def update_gaussian(self, feature_gen): # use 1 splatter image at front view
         start_dim = 0
@@ -213,16 +200,13 @@ class SynthesisNetwork(torch.nn.Module):
         if self.text_decoder.options['gen_xyz']:      
             _depth = feature_gen[:,start_dim:start_dim+1] # h*w, 1
             print(self.h, self.w)
-            save_depth_map(_depth.reshape(self.h, self.w).detach().cpu().numpy())
+            # save_depth_map(_depth.reshape(self.h, self.w).detach().cpu().numpy())
             self.gaussian.update_xyz(_depth, self.ray_origins, self.ray_directions)
             start_dim += 1
         
         if self.text_decoder.options['gen_xyz_offset']:
             _xyz_offset = feature_gen[:,start_dim:start_dim+3]
             self.gaussian.update_xyz_offset(self.verts, _xyz_offset)
-            # print(f"xyz_offset: min={_xyz_offset.min(dim=0)}, max={_xyz_offset.max(dim=0)}")
-            # print(f"verts: min={self.verts.min(dim=0)}, max={self.verts.max(dim=0)}")
-            # st()
             start_dim += 3
 
         if self.text_decoder.options['gen_rgb']:
@@ -262,21 +246,11 @@ class SynthesisNetwork(torch.nn.Module):
         render_opts = EasyDict(**{**self._default_render_options, **render_opts})
         batch_size, num_steps = ws.shape[0], self.cfg.num_ray_steps
         decoder_out = self.tri_plane_decoder(ws[:, :self.tri_plane_decoder.num_ws], **block_kwargs) # [batch_size, 96, 512, 512]
-        print("Decoder out shape:", decoder_out.shape)
-
-        # decoder_out = self.gs_decoder() #TODO: Add decoder: (batch_size, num_ws, w_dim) => (batch_size, )
         # h, w = self.img_resolution, self.img_resolution
         self.h = self.w = (self.train_resolution if self.training else self.test_resolution)
-        # print("Training enabled:", self.training)
-        # print("Train resolution:", self.train_resolution)
-        # print("H:", h, "W:", w)
-        # plane_feats = decoder_out[:, :3 * self.cfg.tri_plane.feat_dim].view(batch_size, 3, self.cfg.tri_plane.feat_dim, h, w)
-        # print(plane_feats.shape)
         feature_images = self.text_decoder(decoder_out) # [batch_size, feat_dim, img_resolution, img_resolution]
-        # print("Feature images shape:", feature_images.shape)
-        # print("h, w:", h, w)
         # if self.training:
-        # feature_images = F.interpolate(feature_images, size=(h, w), mode='bilinear', align_corners=False) # [batch_size, feat_dim, h, w]
+        feature_images = F.interpolate(feature_images, size=(self.h, self.w), mode='bilinear', align_corners=False) # [batch_size, feat_dim, h, w]
         # feature_images = self.text_decoder(decoder_out) # [batch_size, feat_dim, h, w]
         print("Feature images shape:", feature_images.shape)
 
@@ -287,11 +261,6 @@ class SynthesisNetwork(torch.nn.Module):
         c2ws = compute_cam2world_matrix(camera_params) # [batch_size, 4, 4]
         intrinsics = compute_camera_intrinsics(camera_params, self.w, self.h) # [batch_size, 3, 3]
         ray_origins, ray_directions = sample_rays(c2ws, fov=camera_params.fov, resolution=(self.h, self.w), patch_params=patch_params, device=ws.device) # [batch_size, h, w, 3]
-        # print("focal length:", intrinsics[:, 0, 0])
-        # print(intrinsics[0, 0, 1])
-        # print("C2Ws shape:", c2ws.shape)
-        # print("Ray origins shape:", ray_origins.shape)
-        # print("H:", h, "W:", w)
         neural_rendering_resolution = self.h
         for c2w, intrinsic, feature_image, ray_o, ray_d in zip(c2ws, intrinsics, feature_images, ray_origins, ray_directions):
             feature_image = feature_image.reshape(-1, self.feat_dim)
@@ -309,21 +278,9 @@ class SynthesisNetwork(torch.nn.Module):
             # self.ray_directions = self.ray_directions / self.ray_directions.norm(dim=-1, keepdim=True)
             print("Ray origin shape:", self.ray_origins.shape)
             print("Ray directions shape:", self.ray_directions.shape)
-            # print("ray origins min:", self.ray_origins.min(), "max:", self.ray_origins.max())
-            # print("ray directions min:", self.ray_directions.min(), "max:", self.ray_directions.max())
-            # print(f"Z-direction min: {self.ray_directions[:, 2].min()}, max: {self.ray_directions[:, 2].max()}")
-            # visualize_rays(self.ray_origins, self.ray_directions, scale=1.0)
-            # project_rays_to_image(self.ray_origins, self.ray_directions, img_size=w, z_plane=2.0)
-            # project_rays_to_image(self.ray_origins, self.ray_directions, img_size=w, z_plane=3.0)
-            # project_rays_to_image(self.ray_origins, self.ray_directions, img_size=w, z_plane=1.0)
-            # break
             self.viewpoint_camera.update_transforms2(intrinsic, c2w)
             self.update_gaussian(feature_image)
-            save_point_cloud(self.gaussian._xyz.detach().cpu().numpy())
-            # print("xyz shape:", self.gaussian._xyz.shape)
-            # print("sh shape:", self.gaussian._features_dc.shape, self.gaussian._features_rest.shape)
-            # print("scaling shape", self.gaussian._scaling.shape)
-            # print("rotation shape", self.gaussian._rotation.shape)
+            # save_point_cloud(self.gaussian._xyz.detach().cpu().numpy())
             print("xyz min:", self.gaussian._xyz.min(), "max:", self.gaussian._xyz.max(), "mean:", self.gaussian._xyz.mean())
             print("sh min:", self.gaussian._features_dc.min(), "max:", self.gaussian._features_dc.max(), "mean:", self.gaussian._features_dc.mean())
             print("scaling min:", self.gaussian._scaling.min(), "max:", self.gaussian._scaling.max(), "mean:", self.gaussian._scaling.mean())
@@ -344,15 +301,10 @@ class SynthesisNetwork(torch.nn.Module):
             alphas.append(alpha[None])
         img = torch.cat(imgs, dim=0)
         depth = torch.cat(depths, dim=0)
-        # rgbd = self.rgbd_head(decoder_out)
-        # img = rgbd[:, :self.img_channels]  
-        # depth = rgbd[:, self.img_channels:]
+
         img = F.interpolate(img, size=(self.h, self.w), mode='bilinear', align_corners=False)
         depth = F.interpolate(depth, size=(self.h, self.w), mode='bilinear', align_corners=False)
-        # print("Depth adapted enabld:", render_opts.return_depth_adapted)
-        # print("Depth enabled:", render_opts.return_depth)
-        # print("Depth adaptor:", self.depth_adaptor)
-        # print("Concat depth:", render_opts.concat_depth)
+
         if not self.depth_adaptor is None:
             # depth_adapted = self.depth_adaptor(depth, ws[:, 0]) # [batch_size, 1, h, w]
             # print("Minimum adapted depth:", depth_adapted.min().item(), "Maximum adapted depth:", depth_adapted.max().item())
@@ -369,8 +321,6 @@ class SynthesisNetwork(torch.nn.Module):
             out = TensorGroup(img=img)
             if render_opts.return_depth: out.depth = depth # [batch_size, 1, h, w]  
             if render_opts.return_depth_adapted: out.depth_adapted = depth
-            # print("Output img shape:", out.img.shape)
-            # print("Output depth shape:", out.depth.shape)
             return out
         else:
             return img
@@ -481,7 +431,6 @@ class TextureDecoder(torch.nn.Module):
         if self.options['gen_rotation']:
             out['rotation'] = torch.nn.functional.normalize(x[..., start_dim:start_dim+4].reshape(-1,4).reshape(N, H, W, 4)) # check consistency before/after normalize: passed. Use: x[2,2,3,7:11]/out['rotation'][2,:,2,3]
             start_dim += 4
-
 
         # x.permute(0, 3, 1, 2)
         for key, v in out.items():
